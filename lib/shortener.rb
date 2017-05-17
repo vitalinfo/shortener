@@ -7,7 +7,8 @@ module Shortener
 
   CHARSETS = {
     alphanum: ('a'..'z').to_a + (0..9).to_a,
-    alphanumcase: ('a'..'z').to_a + ('A'..'Z').to_a + (0..9).to_a
+    alphanumcase: ('a'..'z').to_a + ('A'..'Z').to_a + (0..9).to_a,
+    alphanumcasehypens:  ('a'..'z').to_a + ('A'..'Z').to_a + (0..9).to_a + ['-', '_']
   }
 
   # default key length: 5 characters
