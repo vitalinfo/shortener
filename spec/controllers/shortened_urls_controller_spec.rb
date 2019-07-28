@@ -8,7 +8,11 @@ describe Shortener::ShortenedUrlsController, type: :controller do
   describe '#show' do
     let(:params) { {} }
     before do
-      get :show, { id: key }.merge(params)
+      if Rails::VERSION::MAJOR < 5
+        get :show, { id: key }.merge(params)
+      else
+        get :show, params: { id: key }.merge(params)
+      end
     end
 
     context 'valid keys' do
@@ -20,21 +24,28 @@ describe Shortener::ShortenedUrlsController, type: :controller do
         end
 
         context "when request is not from an human" do
+          let(:run_action!) do
+            if Rails::VERSION::MAJOR < 5
+              get :show, { id: key }
+            else
+              get :show, params: { id: key }
+            end
+          end
           before do
-            allow_any_instance_of(Rack::Request).to receive(:human?).and_return(false)
+            allow_any_instance_of(ActionController::TestRequest).to receive(:human?).and_return(false)
           end
           context 'Shortener.ignore_robots == true' do
             it "calls fetch with token with track argument as false" do
               Shortener.ignore_robots = true
               expect(Shortener::ShortenedUrl).to receive(:fetch_with_token).with(hash_including(track: false)).and_call_original
-              get :show, { id: key }
+              run_action!
             end
           end
           context 'Shortener.ignore_robots == false (default)' do
             it "calls fetch with token with track argument as true" do
               Shortener.ignore_robots = false
               expect(Shortener::ShortenedUrl).to receive(:fetch_with_token).with(hash_including(track: true)).and_call_original
-              get :show, { id: key }
+              run_action!
             end
           end
         end
@@ -97,7 +108,11 @@ describe Shortener::ShortenedUrlsController, type: :controller do
         before do
           Shortener.default_redirect = 'http://www.default_redirect.com'
           # call again for the get is done with the setting
-          get :show, id: key
+          if Rails::VERSION::MAJOR < 5
+            get :show, id: key
+          else
+            get :show, params: { id: key }
+          end
         end
 
         context 'non existant key' do
@@ -115,6 +130,21 @@ describe Shortener::ShortenedUrlsController, type: :controller do
             expect(response).to redirect_to 'http://www.default_redirect.com'
           end
         end
+      end
+
+      context "custom charset set" do
+        before do
+          Shortener::ShortenedUrl.delete_all
+          Shortener.charset = ("a".."z").to_a + ("A".."Z").to_a + (0..9).to_a + ["-", "_"]
+        end
+
+        context 'key with valid characters' do
+          let(:key) { "cust-Key_123" }
+          let(:custom_url) { Shortener::ShortenedUrl.generate(Faker::Internet.url, custom_key: key) }
+          it 'allows if in custom charset' do
+            expect(custom_url.unique_key).to eq key
+          end      
+        end       
       end
 
       context 'expired code' do

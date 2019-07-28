@@ -1,4 +1,5 @@
 {<img src="https://secure.travis-ci.org/jpmcgrath/shortener.png?branch=master" alt="Build Status" />}[http://travis-ci.org/jpmcgrath/shortener]  {<img src="https://codeclimate.com/github/jpmcgrath/shortener/badges/gpa.svg" />}[https://codeclimate.com/github/jpmcgrath/shortener]
+{<img src="https://badge.fury.io/rb/shortener.png" alt="Gem version" />}[http://badge.fury.io/rb/shortener]
 
 = Shortener
 
@@ -33,7 +34,7 @@ v0.5.2 introduced the ability to set an expiration date for a shortened URL. The
 are stored in a expires_at column in the database, which can be added to your schema with the following
 migration:
 
-  class AddExpiresAtToShortenedUrl < ActiveRecord::Migration
+  class AddExpiresAtToShortenedUrl < ActiveRecord::Migration[4.2]
     def change
       add_column :shortened_urls, :expires_at, :datetime
     end
@@ -47,7 +48,7 @@ migration:
   bundle exec rails g migration add_category_to_shortened_url category:string:index
 
 
-  class AddCategoryToShortenedUrl < ActiveRecord::Migration
+  class AddCategoryToShortenedUrl < ActiveRecord::Migration[4.2]
     def change
       add_column :shortened_urls, :category, :string
       add_index :shortened_urls, :category
@@ -60,17 +61,16 @@ migration:
 * A unique alphanumeric code of generated for each shortened link, this means that we can get more unique combinations than if we just used numbers;
 * The link records a count of how many times it has been “un-shortened”;
 * The link can be associated with a user, this allows for stats of the link usage for a particular user and other interesting things;
-* The controller spawns a new thread to record information to the database, allowing the redirect to happen as quickly as possible;
 
 === Future improvements:
 
 * There has not been an attempt to remove ambiguous characters (i.e. 1 l and capital i, or 0 and O etc.) from the unique key generated for the link. This means people might copy the link incorrectly if copying the link by hand;
 * The system could pre-generate unique keys in advance, avoiding the database penalty when checking that a newly generated key is unique;
-* The system could store the shortened URL if the url is to be continually rendered;
+* The system could store/cache the shortened URL if the url is to be continually rendered;
 
 == Installation
 
-Shortener is compatible with Rails v3 and v4. To install, add to your Gemfile:
+Shortener is compatible with Rails v3, v4 & v5. To install, add to your Gemfile:
 
   gem 'shortener'
 
@@ -79,6 +79,8 @@ After you install Shortener run the generator:
   rails generate shortener
 
 This generator will create a migration to create the shortened_urls table where your shortened URLs will be stored.
+
+*Note:* The default length of the url field in the generated migration is 2083. This is because MySQL requires fixed length indicies and browsers have a defacto limit on URL length. This may not be right for you or your database. The discussion can be seen here https://github.com/jpmcgrath/shortener/pull/98
 
 Then add to your routes:
 
@@ -99,6 +101,14 @@ By default, Shortener will generate unique keys using numbers and lowercase a-z.
 the upper and lower case charset, by including the following:
 
   Shortener.charset = :alphanumcase
+  
+If you want to use a custom charset, you can create your own combination by creating an array of possible values, such as allowing underscore and dashes:
+
+  Shortener.charset = ("a".."z").to_a + (0..9).to_a + ["-", "_"]
+
+If you want to use a custom charset, you can create your own combination by creating an array of possible values, such as allowing underscore and dashes:
+
+  Shortener.charset = ("a".."z").to_a + (0..9).to_a + ["-", "_"]
 
 == Usage
 
@@ -140,9 +150,11 @@ And to access those URLs:
 
 === Shortened URLs with custom unique key
 
-You can pass in your own key when generating a shortened URL. This should be unique.
+You can pass in your own key when generating a shortened URL. This should be unique.  
 
-  Shortener::ShortenedUrl.generate("example.com", owner: user, custom_key: "my-key")
+*Important:* Custom keys can't contain characters other than those defined in *Shortener.charset*. Default is numbers and lowercase a-z (See *Configuration*).
+
+  Shortener::ShortenedUrl.generate("example.com", owner: user, custom_key: "mykey")
 
   short_url("http://example.com", custom_key: 'yourkey')
 
@@ -183,6 +195,21 @@ your shortener configuration:
 
   Shortener.ignore_robots = true
 
+=== Mounting on a Subdomain
+
+If you want to constrain the shortener route to a subdomain, the following config will
+prevent the subdomain parameter from leaking in to shortened URLs if it matches the configured subdomain.
+
+Within config/initializers/shortener.rb
+
+  Shortener.subdomain = 's'
+
+Within config/routes.rb
+
+  constraints subdomain: 's' do
+    get '/:id' => "shortener/shortened_urls#show"
+  end
+
 === URL Parameters
 
 Parameters are passed though from the shortened url, to the destination URL. If the destination
@@ -190,7 +217,7 @@ URL has the same parameters as the destination URL, the parameters on the shorte
 precedence over those on the destination URL.
 
 For example, if we have an orginal URL of:
-> http://destination.com?test=yes&happy=defo (idenfified with token ABCDEF)
+> http://destination.com?test=yes&happy=defo (identified with token ABCDEF)
 Which is shortened into:
 > http://coolapp.io/s/ABCDEF?test=no&why=not
 Then, the resulting URL will be:
@@ -247,20 +274,21 @@ Shortener is used in a number of production systems, including, but not limited 
 
 If you are using Shortener in your project and would like to be added to this list, please get in touch!
 
-== Authors
-
-* {James McGrath}[https://github.com/jpmcgrath]
-* {Michael Reinsch}[https://github.com/mreinsch]
-
 == Contributing
 
-New feature requests are welcome, code is more welcome still. Code with Specs is the
-most welcomiest there is!
+We welcome new contributors. Because we're all busy people, and because Shortener
+is used/relied upon by many projects, it is essential that new Pull Requests
+are opened with good spec coverage, and a passing build on supported ruby versions
+and Rails versions.
 
 To contribute:
 
 1. Fork it
 2. Create your feature branch (git checkout -b my-new-feature)
-3. Commit your changes (git commit -am 'Add some feature')
-4. Push to the branch (git push origin my-new-feature)
-5. Create a new Pull Request
+3. Write spec coverage of changes
+4. Commit your changes (git commit -am 'Add some feature')
+5. Push to the branch (git push origin my-new-feature)
+6. Create a new Pull Request
+7. Ensure the build is passing
+
+Note: We adhere to the community driven Ruby style guide: https://github.com/bbatsov/ruby-style-guide
